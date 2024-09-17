@@ -7,9 +7,24 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{CAF7
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "front", "front", "{62A6F932-369D-4AC2-9EEB-BDDE12EE2AC4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "bulk_insertt_api", "backend\bulk_insertt_api\bulk_insertt_api.csproj", "{693D2134-E420-431D-A6C7-25D70DF0E783}"
+EndProject
 Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{693D2134-E420-431D-A6C7-25D70DF0E783}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{693D2134-E420-431D-A6C7-25D70DF0E783}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{693D2134-E420-431D-A6C7-25D70DF0E783}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{693D2134-E420-431D-A6C7-25D70DF0E783}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{693D2134-E420-431D-A6C7-25D70DF0E783} = {CAF7EF4D-FA89-4C71-BEAE-48508E9F2964}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {29F1C0C6-3830-4E7A-AD85-025F3F2CDDDB}

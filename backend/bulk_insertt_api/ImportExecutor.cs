@@ -12,45 +12,90 @@ namespace bulk_insertt_api
     public class ImportExecutor
     {
         private readonly IHubContext<ImportHub> hubContext;
-        public ImportExecutor(IHubContext<ImportHub> hubContext)
+        private readonly IWebHostEnvironment environment;
+        public ImportExecutor(IHubContext<ImportHub> hubContext, IWebHostEnvironment webHostEnvironment)
         {
             this.hubContext = hubContext;
+            this.environment = webHostEnvironment;
         }
 
         public async Task ExecuteAsync(string connectionId)
         {
-            var connStr = "";
-            var dicts = new List<ECDict>();
-            using var dbConnection = new MySqlConnection(connStr);
-
-            dbConnection.Open();
-
-            var sqlBulkCopy = new MySqlBulkCopy(dbConnection, null);
-            sqlBulkCopy.DestinationTableName = nameof(ECDict);
-            var propertys = typeof(ECDict).GetProperties()
-                 .Where(it => it.CanRead && it.GetCustomAttribute<NotMappedAttribute>() == null)
-                 .ToList();
-            for (int i = 0; i < propertys.Count; i++)
+            try
             {
-                var property = propertys[i];
-                var columnName = property.GetCustomAttribute<ColumnAttribute>()?.Name ?? property.Name;
-                sqlBulkCopy.ColumnMappings.Add(new MySqlBulkCopyColumnMapping(i, columnName));
+                var connStr = "server=192.168.174.129;port=3306;database=Dict;uid=root;pwd=123456;AllowLoadLocalInfile=true;";
+                var dicts = ReadCsvFile();
+                using var dbConnection = new MySqlConnection(connStr);
+
+                dbConnection.Open();
+
+                var sqlBulkCopy = new MySqlBulkCopy(dbConnection, null);
+                sqlBulkCopy.DestinationTableName = nameof(ECDict);
+                var propertys = typeof(ECDict).GetProperties()
+                     .Where(it => it.CanRead && it.GetCustomAttribute<NotMappedAttribute>() == null)
+                     .ToList();
+                for (int i = 0; i < propertys.Count; i++)
+                {
+                    var property = propertys[i];
+                    var columnName = property.GetCustomAttribute<ColumnAttribute>()?.Name ?? property.Name;
+                    sqlBulkCopy.ColumnMappings.Add(new MySqlBulkCopyColumnMapping(i, columnName));
+                }
+
+                // 每次处理100条
+                int batchSize = 10000;
+                int totalCount = dicts.Count;
+                int counter = 0;
+                for (int i = 0; i < totalCount; i += batchSize)
+                {
+                    int count = Math.Min(batchSize, totalCount - i);
+                    counter += count;
+                    var batch = dicts.GetRange(i, count);
+                    var table = ToDataTable(batch);
+                    await sqlBulkCopy.WriteToServerAsync(table);
+                    await hubContext.Clients.Client(connectionId).SendAsync("ImportProgress", totalCount, counter);
+                    Console.WriteLine($"已上传：{counter}条");
+                }
+                await hubContext.Clients.Client(connectionId).SendAsync("ImportState", "上传完成！");
+
             }
-            var table = ToDataTable(dicts);
-
-            await sqlBulkCopy.WriteToServerAsync(table);
-
+            catch (Exception ex)
+            {
+                await hubContext.Clients.Client(connectionId).SendAsync("ImportError", ex.Message);
+                Console.WriteLine(ex.Message);
+            }
 
         }
 
-        public static ConcurrentDictionary<string, object> CacheDictionary = new ConcurrentDictionary<string, object>();
+        /// <summary>
+        ///  读取csv文件
+        /// </summary>
+        /// <returns></returns>
+        private List<ECDict> ReadCsvFile()
+        {
+            var filePath = Path.Combine(environment.WebRootPath, "ecdict.csv");
+            return File.ReadLines(filePath)
+                .Skip(1)
+                .Select(line =>
+                {
+                    var value = line.Split(',');
+                    return new ECDict
+                    {
+                        Word = value[0],
+                        Phonetic = value[1],
+                        Definition = value[2],
+                        Translation = value[3]
+                    };
+                }).ToList();
+        }
+
+        private static ConcurrentDictionary<string, object> CacheDictionary = new ConcurrentDictionary<string, object>();
         /// <summary>
         /// 构建一个object数据转换成一维数组数据的委托
         /// </summary>
         /// <param name="objType"></param>
         /// <param name="propertyInfos"></param>
         /// <returns></returns>
-        public static Func<T, object[]> BuildObjectGetValuesDelegate<T>(List<PropertyInfo> propertyInfos) where T : class
+        private static Func<T, object[]> BuildObjectGetValuesDelegate<T>(List<PropertyInfo> propertyInfos) where T : class
         {
             var objParameter = Expression.Parameter(typeof(T), "model");
             var selectExpressions = propertyInfos.Select(it => BuildObjectGetValueExpression(objParameter, it));
@@ -65,14 +110,14 @@ namespace bulk_insertt_api
         /// <param name="modelExpression"></param>
         /// <param name="propertyInfo"></param>
         /// <returns></returns>
-        public static Expression BuildObjectGetValueExpression(ParameterExpression modelExpression, PropertyInfo propertyInfo)
+        private static Expression BuildObjectGetValueExpression(ParameterExpression modelExpression, PropertyInfo propertyInfo)
         {
             var propertyExpression = Expression.Property(modelExpression, propertyInfo);
             var convertExpression = Expression.Convert(propertyExpression, typeof(object));
             return convertExpression;
         }
 
-        public static DataTable ToDataTable<T>(IEnumerable<T> source, List<PropertyInfo> propertyInfos = null, bool useColumnAttribute = false) where T : class
+        private static DataTable ToDataTable<T>(IEnumerable<T> source, List<PropertyInfo> propertyInfos = null, bool useColumnAttribute = false) where T : class
         {
             var table = new DataTable("template");
             if (propertyInfos == null || propertyInfos.Count == 0)
